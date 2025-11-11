@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ktu-announcements-api
+    runtime: docker
+    plan: starter
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: HEADLESS
+        value: true
+    autoDeploy: true
