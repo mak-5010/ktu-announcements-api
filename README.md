@@ -106,33 +106,121 @@ python ktu_scrape_site.py
 
 This creates `ktu_announcements.json` with scraped data.
 
-## Deployment on Render
+## Deployment Options
 
-### Option 1: Using render.yaml (Recommended)
+### Quick Deployment Options Summary
 
-1. Push your code to GitHub
-2. Go to [Render Dashboard](https://dashboard.render.com/)
-3. Click "New +" → "Blueprint"
-4. Connect your repository
-5. Render will automatically detect `render.yaml` and deploy
+| Platform | Cost | Setup Difficulty | Recommendation |
+|----------|------|------------------|----------------|
+| **Render (Free)** | FREE | Easy | ⭐⭐⭐ Best choice |
+| **Oracle Cloud** | FREE forever | Medium | ⭐⭐ Best for always-on |
+| **Railway** | ~$3/month | Easy | ⭐ Good for scaling |
+| **Fly.io** | ~$3-5/month | Easy | ⭐ Good balance |
 
-### Option 2: Manual Docker Deployment
+**👉 More free alternatives in [DEPLOYMENT_FREE.md](DEPLOYMENT_FREE.md)**
 
-1. Go to [Render Dashboard](https://dashboard.render.com/)
-2. Click "New +" → "Web Service"
-3. Connect your GitHub repository
-4. Configure:
-   - **Name**: ktu-announcements-api
+---
+
+### Option 1: Render Free Tier (RECOMMENDED) ⭐
+
+Render offers a **FREE tier** for web services with Docker support!
+
+#### Free Tier Limitations
+- 512MB RAM (may be tight for Selenium)
+- Spins down after 15 minutes of inactivity
+- Slower cold starts (30-60 seconds on first request)
+- 750 hours/month free (sufficient for most use cases)
+
+#### Deployment Steps
+
+1. **Push code to GitHub**:
+```bash
+cd ktu-announcements-api
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/mak-5010/ktu-announcements-api.git
+git push -u origin main
+```
+
+2. **Go to Render Dashboard**: [https://dashboard.render.com/](https://dashboard.render.com/)
+
+3. **Create New Web Service**:
+   - Click "New +" → "Web Service"
+   - Connect your GitHub repository
+   - Select `ktu-announcements-api`
+
+4. **Configure**:
+   - **Name**: `ktu-announcements-api`
    - **Runtime**: Docker
-   - **Region**: Singapore (or closest to your users)
-   - **Plan**: Starter ($7/month) or Free
+   - **Region**: Singapore (or closest to you)
+   - **Branch**: `main`
+   - **Plan**: **Free** ✅
    - **Health Check Path**: `/health`
 
-5. Click "Create Web Service"
+5. **Advanced Settings** (Optional):
+   - Auto-Deploy: Yes (recommended)
+
+6. **Create Web Service**
+
+7. **Wait for deployment** (~5-10 minutes first time)
+
+8. **Get your URL**:
+   ```
+   https://ktu-announcements-api.onrender.com
+   ```
+
+#### ⚠️ Important Notes for Free Tier
+
+**Memory Optimization**:
+If you face memory issues (512MB is tight for Chrome), consider:
+- The scraper already uses headless Chrome with optimized flags
+- Caching prevents frequent scraping
+- If errors occur, upgrade to Starter plan ($7/month for 512MB guaranteed)
+
+**Handling Cold Starts**:
+- First request after inactivity takes 30-60 seconds
+- WordPress plugin should handle this gracefully (503 retry)
+- Use `/api/ktu/refresh` endpoint to warm up the service
+
+**Monitoring**:
+- Check logs in Render dashboard
+- Use `/api/ktu/status` to monitor scraper state
+- Free tier includes basic monitoring
+
+### Option 2: Oracle Cloud (FREE Forever) ⭐
+
+See complete guide in [DEPLOYMENT_FREE.md](DEPLOYMENT_FREE.md#-option-1-oracle-cloud-free-tier-recommended-)
+
+**Quick Steps**:
+1. Sign up at [Oracle Cloud Free Tier](https://www.oracle.com/cloud/free/)
+2. Create Ubuntu VM (1GB RAM - Always Free)
+3. Install Docker & Docker Compose
+4. Clone repo and run `docker-compose up -d`
+
+### Option 3: Railway or Fly.io (~$3-5/month)
+
+**Railway**:
+```bash
+npm install -g @railway/cli
+railway login
+railway link
+railway up
+```
+
+**Fly.io**:
+```bash
+curl -L https://fly.io/install.sh | sh
+fly launch
+fly deploy
+```
+
+See detailed guides in [DEPLOYMENT_FREE.md](DEPLOYMENT_FREE.md)
 
 ### Environment Variables (Optional)
 
-You can set these in Render dashboard:
+You can set these in your deployment platform:
 - `PORT`: 8080 (default)
 - `HEADLESS`: true (default)
 

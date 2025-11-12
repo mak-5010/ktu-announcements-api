@@ -40,6 +40,19 @@ def make_driver(headless=HEADLESS):
     chrome_options.add_argument("--disable-dev-shm-usage")
     # reduce logging
     chrome_options.add_argument("--log-level=3")
+    # Memory optimization for low-RAM environments (Render free tier = 512MB)
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-plugins")
+    chrome_options.add_argument("--disable-images")  # Don't load images to save memory
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+    chrome_options.add_argument("--single-process")  # Use single process to save memory
+    chrome_options.add_argument("--disable-background-networking")
+    chrome_options.add_argument("--disable-default-apps")
+    chrome_options.add_argument("--disable-sync")
+    chrome_options.add_argument("--metrics-recording-only")
+    chrome_options.add_argument("--mute-audio")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--disable-popup-blocking")
     # set a realistic user-agent
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36")
     service = Service(ChromeDriverManager().install())

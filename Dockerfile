@@ -37,4 +37,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "300", "--log-level", "info", "server:app"]
+# Use 1 worker for Render free tier (512MB RAM) to reduce memory usage
+# Increase to 2 workers if using paid plans with more RAM
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "300", "--log-level", "info", "--worker-class", "sync", "server:app"]
