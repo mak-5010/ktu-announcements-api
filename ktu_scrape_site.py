@@ -218,37 +218,60 @@ def main():
             if "Announcement" in page_source or "announcement" in page_source.lower():
                 print("Found keyword in page source; attempting fallback BeautifulSoup parse of static HTML.")
                 soup = BeautifulSoup(page_source, "html.parser")
-                # find h4 anchors
                 fallback = []
 
-                # Try multiple selectors
-                for h4 in soup.select("h4"):
-                    a = h4.find("a")
-                    if a and a.text.strip():
-                        fallback.append({
-                            "title": a.text.strip(),
-                            "link": a.get("href"),
-                            "date": "",
-                            "message_html": "",
-                            "attachments": []
-                        })
+                # Parse KTU-specific structure: div.row.m-b-25 containing announcements
+                announcement_blocks = soup.select("div.row.m-b-25")
+                print(f"Found {len(announcement_blocks)} announcement blocks")
 
-                # Also try finding divs with announcement class
-                for div in soup.select("div[class*='announcement'], div[class*='Announcement'], .announcement-item, .notice"):
-                    title_el = div.select_one("h4 a, h3 a, h2 a, a")
-                    if title_el and title_el.text.strip():
-                        fallback.append({
-                            "title": title_el.text.strip(),
-                            "link": title_el.get("href", ""),
-                            "date": "",
-                            "message_html": "",
-                            "attachments": []
-                        })
+                for block in announcement_blocks:
+                    try:
+                        # Title is in h6.f-w-bold
+                        title_el = block.select_one("h6.f-w-bold")
+                        title = title_el.get_text(strip=True) if title_el else ""
 
-                print(f"Fallback found {len(fallback)} items")
+                        # Date is in div.text-theme.h6.m-t-10.f-w-bold
+                        date_el = block.select_one("div.text-theme.h6.m-t-10.f-w-bold")
+                        date = date_el.get_text(strip=True).replace("", "").strip() if date_el else ""
+
+                        # Message is in div.m-t-10.font-14 > p
+                        msg_el = block.select_one("div.m-t-10.font-14")
+                        message_html = str(msg_el) if msg_el else ""
+                        message_text = msg_el.get_text(strip=True) if msg_el else ""
+
+                        # Attachments - button with value attribute
+                        attachments = []
+                        button = block.select_one("button.btn")
+                        if button and button.get("value"):
+                            attachments.append({
+                                "title": button.get_text(strip=True).replace("", "").strip(),
+                                "href": f"#attachment-{button.get('value')}"  # KTU uses encoded values
+                            })
+
+                        if title:  # Only add if we have a title
+                            fallback.append({
+                                "title": title,
+                                "link": "",  # KTU doesn't provide direct links in this structure
+                                "date": date,
+                                "message_html": message_html,
+                                "message_text": message_text,
+                                "attachments": attachments
+                            })
+                    except Exception as e:
+                        print(f"Error parsing announcement block: {e}")
+                        continue
+
+                print(f"Fallback parsed {len(fallback)} announcements")
+
+                # Debug: print sample of page source if nothing found
+                if len(fallback) == 0:
+                    print("DEBUG: First 500 chars of page source:")
+                    print(page_source[:500])
+
                 announcements = fallback
             else:
                 print("No announcement keywords found in page source")
+                print("DEBUG: Page source sample:", page_source[:300])
 
         # sanitize message_html -> message_text
         for item in announcements:
