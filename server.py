@@ -16,7 +16,9 @@ CORS(app)  # Enable CORS for WordPress integration
 cache = {
     "data": None,
     "last_updated": None,
-    "is_scraping": False
+    "is_scraping": False,
+    "last_error": None,
+    "last_scraper_output": None
 }
 cache_lock = threading.Lock()
 
@@ -41,8 +43,17 @@ def run_scraper():
             timeout=120  # 2 minute timeout
         )
 
+        # Store output for debugging
+        with cache_lock:
+            cache["last_scraper_output"] = {
+                "stdout": result.stdout[-1000:] if result.stdout else "",  # Last 1000 chars
+                "stderr": result.stderr[-1000:] if result.stderr else "",
+                "returncode": result.returncode
+            }
+
         if result.returncode == 0:
             print(f"[{datetime.now()}] Scraper completed successfully")
+            print(f"[{datetime.now()}] Scraper stdout: {result.stdout[-200:]}")
             # Load the new data into cache
             if os.path.exists(JSON_FILE):
                 with open(JSON_FILE, "r", encoding="utf-8") as f:
@@ -50,12 +61,32 @@ def run_scraper():
                 with cache_lock:
                     cache["data"] = new_data
                     cache["last_updated"] = time.time()
+                    cache["last_error"] = None
+            else:
+                error_msg = "Scraper completed but JSON file not found"
+                print(f"[{datetime.now()}] {error_msg}")
+                with cache_lock:
+                    cache["last_error"] = error_msg
         else:
-            print(f"[{datetime.now()}] Scraper failed: {result.stderr}")
-    except subprocess.TimeoutExpired:
-        print(f"[{datetime.now()}] Scraper timed out")
+            error_msg = f"Scraper failed with code {result.returncode}: {result.stderr}"
+            print(f"[{datetime.now()}] {error_msg}")
+            with cache_lock:
+                cache["last_error"] = error_msg
+    except subprocess.TimeoutExpired as e:
+        error_msg = "Scraper timed out after 120 seconds"
+        print(f"[{datetime.now()}] {error_msg}")
+        with cache_lock:
+            cache["last_error"] = error_msg
+            cache["last_scraper_output"] = {
+                "stdout": e.stdout[-1000:] if e.stdout else "",
+                "stderr": e.stderr[-1000:] if e.stderr else "",
+                "returncode": "timeout"
+            }
     except Exception as e:
-        print(f"[{datetime.now()}] Scraper error: {e}")
+        error_msg = f"Scraper error: {str(e)}"
+        print(f"[{datetime.now()}] {error_msg}")
+        with cache_lock:
+            cache["last_error"] = error_msg
     finally:
         with cache_lock:
             cache["is_scraping"] = False
@@ -169,6 +200,18 @@ def status():
 def health():
     """Health check endpoint for Render"""
     return jsonify({"status": "healthy"}), 200
+
+@app.route('/api/ktu/debug')
+def debug():
+    """Debug endpoint to see scraper output and errors"""
+    with cache_lock:
+        return jsonify({
+            "last_error": cache["last_error"],
+            "last_scraper_output": cache["last_scraper_output"],
+            "is_scraping": cache["is_scraping"],
+            "has_data": cache["data"] is not None,
+            "json_file_exists": os.path.exists(JSON_FILE)
+        })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
