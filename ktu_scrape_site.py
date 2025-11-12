@@ -28,6 +28,7 @@ KTU_URL = "https://ktu.edu.in/Menu/announcements"
 OUTPUT_FILE = "ktu_announcements.json"
 WAIT_SECONDS = 35  # wait for JS-rendered content (increased for Render)
 HEADLESS = True    # set False while debugging to see the browser
+MAX_PAGES = 3      # Number of pages to scrape (10 announcements per page, so 30 total)
 
 def make_driver(headless=HEADLESS):
     from selenium.webdriver.chrome.options import Options
@@ -187,91 +188,99 @@ def extract_from_dom(driver):
 
     return results
 
+def scrape_page(driver):
+    """Scrape announcements from current page"""
+    page_source = driver.page_source
+    soup = BeautifulSoup(page_source, "html.parser")
+    announcements = []
+
+    # Parse KTU-specific structure: div.row.m-b-25 containing announcements
+    announcement_blocks = soup.select("div.row.m-b-25")
+
+    for block in announcement_blocks:
+        try:
+            # Title is in h6.f-w-bold
+            title_el = block.select_one("h6.f-w-bold")
+            title = title_el.get_text(strip=True) if title_el else ""
+
+            # Date is in div.text-theme.h6.m-t-10.f-w-bold
+            date_el = block.select_one("div.text-theme.h6.m-t-10.f-w-bold")
+            date = date_el.get_text(strip=True).replace("", "").strip() if date_el else ""
+
+            # Message is in div.m-t-10.font-14
+            msg_el = block.select_one("div.m-t-10.font-14")
+            message_html = str(msg_el) if msg_el else ""
+            message_text = msg_el.get_text(strip=True) if msg_el else ""
+
+            # Attachments - button with value attribute
+            attachments = []
+            button = block.select_one("button.btn")
+            if button and button.get("value"):
+                attachments.append({
+                    "title": button.get_text(strip=True).replace("", "").strip(),
+                    "href": f"#attachment-{button.get('value')}"
+                })
+
+            if title:  # Only add if we have a title
+                announcements.append({
+                    "title": title,
+                    "link": "",
+                    "date": date,
+                    "message_html": message_html,
+                    "message_text": message_text,
+                    "attachments": attachments
+                })
+        except Exception as e:
+            print(f"Error parsing announcement block: {e}")
+            continue
+
+    return announcements
+
 def main():
     driver = make_driver(headless=HEADLESS)
+    all_announcements = []
+
     try:
+        print(f"Starting scraper - will fetch {MAX_PAGES} pages")
         print("Loading:", KTU_URL)
         driver.get(KTU_URL)
 
         # Let initial JS run
-        time.sleep(3)  # Increased from 1 to 3 seconds for slower servers
+        time.sleep(3)
 
-        ok = wait_for_announcements(driver)
-        if not ok:
-            print("Timed out waiting for announcement elements. Trying a longer wait + scroll.")
-            # try scroll and longer wait
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(5)  # Increased wait time
-            if not wait_for_announcements(driver):
-                print("No announcements found after extended wait.")
-                # Log page title for debugging
-                print("Page title:", driver.title)
-                # still attempt extraction (may be partial)
-        # extract
-        announcements = extract_from_dom(driver)
-        print("Found announcements:", len(announcements))
+        # Scrape multiple pages
+        for page_num in range(1, MAX_PAGES + 1):
+            print(f"\n=== Scraping Page {page_num}/{MAX_PAGES} ===")
 
-        # If empty, as a last resort try to fetch the HTML content (page source) and parse for 'announcement' keyword
-        if not announcements:
-            page_source = driver.page_source
-            print("Checking page source length:", len(page_source))
-            if "Announcement" in page_source or "announcement" in page_source.lower():
-                print("Found keyword in page source; attempting fallback BeautifulSoup parse of static HTML.")
-                soup = BeautifulSoup(page_source, "html.parser")
-                fallback = []
+            # Wait for page to load
+            time.sleep(2)
 
-                # Parse KTU-specific structure: div.row.m-b-25 containing announcements
-                announcement_blocks = soup.select("div.row.m-b-25")
-                print(f"Found {len(announcement_blocks)} announcement blocks")
+            # Scrape current page
+            page_announcements = scrape_page(driver)
+            print(f"Found {len(page_announcements)} announcements on page {page_num}")
+            all_announcements.extend(page_announcements)
 
-                for block in announcement_blocks:
-                    try:
-                        # Title is in h6.f-w-bold
-                        title_el = block.select_one("h6.f-w-bold")
-                        title = title_el.get_text(strip=True) if title_el else ""
+            # Click next page if not the last page
+            if page_num < MAX_PAGES:
+                try:
+                    # Find "next" button
+                    next_button = driver.find_element(By.XPATH, "//li[@class='next']/a[@rel='next']")
+                    if next_button:
+                        print("Clicking next page...")
+                        next_button.click()
+                        time.sleep(3)  # Wait for next page to load
+                    else:
+                        print("No more pages available")
+                        break
+                except NoSuchElementException:
+                    print("Next button not found - end of pages")
+                    break
+                except Exception as e:
+                    print(f"Error navigating to next page: {e}")
+                    break
 
-                        # Date is in div.text-theme.h6.m-t-10.f-w-bold
-                        date_el = block.select_one("div.text-theme.h6.m-t-10.f-w-bold")
-                        date = date_el.get_text(strip=True).replace("", "").strip() if date_el else ""
-
-                        # Message is in div.m-t-10.font-14 > p
-                        msg_el = block.select_one("div.m-t-10.font-14")
-                        message_html = str(msg_el) if msg_el else ""
-                        message_text = msg_el.get_text(strip=True) if msg_el else ""
-
-                        # Attachments - button with value attribute
-                        attachments = []
-                        button = block.select_one("button.btn")
-                        if button and button.get("value"):
-                            attachments.append({
-                                "title": button.get_text(strip=True).replace("", "").strip(),
-                                "href": f"#attachment-{button.get('value')}"  # KTU uses encoded values
-                            })
-
-                        if title:  # Only add if we have a title
-                            fallback.append({
-                                "title": title,
-                                "link": "",  # KTU doesn't provide direct links in this structure
-                                "date": date,
-                                "message_html": message_html,
-                                "message_text": message_text,
-                                "attachments": attachments
-                            })
-                    except Exception as e:
-                        print(f"Error parsing announcement block: {e}")
-                        continue
-
-                print(f"Fallback parsed {len(fallback)} announcements")
-
-                # Debug: print sample of page source if nothing found
-                if len(fallback) == 0:
-                    print("DEBUG: First 500 chars of page source:")
-                    print(page_source[:500])
-
-                announcements = fallback
-            else:
-                print("No announcement keywords found in page source")
-                print("DEBUG: Page source sample:", page_source[:300])
+        announcements = all_announcements
+        print(f"\nTotal announcements scraped: {len(announcements)}")
 
         # sanitize message_html -> message_text
         for item in announcements:
