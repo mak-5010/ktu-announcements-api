@@ -28,7 +28,7 @@ KTU_URL = "https://ktu.edu.in/Menu/announcements"
 OUTPUT_FILE = "ktu_announcements.json"
 WAIT_SECONDS = 35  # wait for JS-rendered content (increased for Render)
 HEADLESS = True    # set False while debugging to see the browser
-MAX_PAGES = 3      # Number of pages to scrape (10 announcements per page, so 30 total)
+MAX_PAGES = int(os.getenv("MAX_PAGES", "3"))  # Number of pages to scrape (10 per page, configurable via env var)
 
 def make_driver(headless=HEADLESS):
     from selenium.webdriver.chrome.options import Options
