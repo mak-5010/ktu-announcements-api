@@ -26,7 +26,7 @@ import os
 
 KTU_URL = "https://ktu.edu.in/Menu/announcements"
 OUTPUT_FILE = "ktu_announcements.json"
-WAIT_SECONDS = 25  # wait for JS-rendered content
+WAIT_SECONDS = 35  # wait for JS-rendered content (increased for Render)
 HEADLESS = True    # set False while debugging to see the browser
 
 def make_driver(headless=HEADLESS):
@@ -194,16 +194,18 @@ def main():
         driver.get(KTU_URL)
 
         # Let initial JS run
-        time.sleep(1)
+        time.sleep(3)  # Increased from 1 to 3 seconds for slower servers
 
         ok = wait_for_announcements(driver)
         if not ok:
             print("Timed out waiting for announcement elements. Trying a longer wait + scroll.")
             # try scroll and longer wait
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3)
+            time.sleep(5)  # Increased wait time
             if not wait_for_announcements(driver):
                 print("No announcements found after extended wait.")
+                # Log page title for debugging
+                print("Page title:", driver.title)
                 # still attempt extraction (may be partial)
         # extract
         announcements = extract_from_dom(driver)
@@ -212,11 +214,14 @@ def main():
         # If empty, as a last resort try to fetch the HTML content (page source) and parse for 'announcement' keyword
         if not announcements:
             page_source = driver.page_source
+            print("Checking page source length:", len(page_source))
             if "Announcement" in page_source or "announcement" in page_source.lower():
                 print("Found keyword in page source; attempting fallback BeautifulSoup parse of static HTML.")
                 soup = BeautifulSoup(page_source, "html.parser")
                 # find h4 anchors
                 fallback = []
+
+                # Try multiple selectors
                 for h4 in soup.select("h4"):
                     a = h4.find("a")
                     if a and a.text.strip():
@@ -227,7 +232,23 @@ def main():
                             "message_html": "",
                             "attachments": []
                         })
+
+                # Also try finding divs with announcement class
+                for div in soup.select("div[class*='announcement'], div[class*='Announcement'], .announcement-item, .notice"):
+                    title_el = div.select_one("h4 a, h3 a, h2 a, a")
+                    if title_el and title_el.text.strip():
+                        fallback.append({
+                            "title": title_el.text.strip(),
+                            "link": title_el.get("href", ""),
+                            "date": "",
+                            "message_html": "",
+                            "attachments": []
+                        })
+
+                print(f"Fallback found {len(fallback)} items")
                 announcements = fallback
+            else:
+                print("No announcement keywords found in page source")
 
         # sanitize message_html -> message_text
         for item in announcements:
