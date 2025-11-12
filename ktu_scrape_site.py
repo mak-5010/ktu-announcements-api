@@ -245,15 +245,16 @@ def main():
         print("Loading:", KTU_URL)
         driver.get(KTU_URL)
 
-        # Let initial JS run
-        time.sleep(3)
+        # Let initial JS run - longer wait for first page
+        time.sleep(5)
 
         # Scrape multiple pages
         for page_num in range(1, MAX_PAGES + 1):
             print(f"\n=== Scraping Page {page_num}/{MAX_PAGES} ===")
 
-            # Wait for page to load
-            time.sleep(2)
+            # Wait for page to load (first page already waited)
+            if page_num > 1:
+                time.sleep(3)
 
             # Scrape current page
             page_announcements = scrape_page(driver)
